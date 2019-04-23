@@ -9,12 +9,14 @@ var (
 	config string
 	help   bool
 	debug  bool
+	mode   string
 )
 
 func init() {
 	flag.BoolVar(&help, "h", false, "this help")
 	flag.BoolVar(&debug, "debug", false, "debug mode")
 	flag.StringVar(&config, "config", "config.yaml", "configure file.")
+	flag.StringVar(&mode, "mode", "client", "server/client.")
 }
 
 func main() {

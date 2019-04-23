@@ -2,217 +2,72 @@ package main
 
 import (
 	"crypto/tls"
-	"errors"
+
 	"log"
 	"net"
-	"sync"
 )
 
-const (
-	MAX_BUF_SIZE = 64 * 1024  // 缓冲区大小(单位：byte)
-	MAGIC_FLAG   = 0x98b7f30a // 校验魔术字
-	MSG_HEAD_LEN = 3 * 4      // 消息头长度
-)
-
-type TransferHeader struct {
-	Flag uint32 // 魔术字
-	Size uint32 // 内容长度
-	Body []byte // 传输的内容
-}
-
-type MessageType uint32
-
-const (
-	_ MessageType = iota
-	CONNECT
-	RUNING
-	CLOSE
-)
-
-type MessageRequest struct {
-	ChanID    string
-	MsgType   MessageType
-	LocalAdd  string
-	RemoteAdd string
-	Body      []byte
-}
-
-type MessageRsponse struct {
-	ChanID    string
-	MsgType   MessageType
-	LocalAdd  string
-	RemoteAdd string
-	Body      []byte
-}
-
-type Channel struct {
-	sync.Mutex
-	sync.WaitGroup
-	id        string
-	localadd  string
-	remoteadd string
-	exit      bool
-	conn      net.Conn
-	read      chan []byte
-	write     chan []byte
-}
-
-type ChannelPool struct {
-	channels map[string]Channel
-	sync.RWMutex
-}
-
-func (c *Channel) Read() ([]byte, error) {
-
-	if c.exit {
-		return nil, errors.New("channel close")
+func serverconnet(remote string) net.Conn {
+	conn, err := net.Dial("tcp", remote)
+	if err != nil {
+		log.Println(err.Error())
+		return nil
 	}
-	body, ok := <-c.read
-	if !ok {
-		return nil, errors.New("channel close")
-	}
-	return body, nil
+	return conn
 }
 
-func (c *Channel) Write(body []byte) error {
-
-	bodycpy := make([]byte, len(body))
-	copy(bodycpy, body)
-
-	c.Lock()
-	defer c.Unlock()
-	if c.exit {
-		return errors.New("channel close")
-	}
-	c.write <- bodycpy
-	return nil
-}
-
-func (c *Channel) Close() {
-	c.Lock()
-	if c.exit {
-		c.Unlock()
-		return
-	}
-	c.conn.Close()
-	close(c.write)
-	close(c.read)
-	c.exit = true
-	c.Unlock()
-
-	c.Wait()
-}
-
-func NewChannel(id, localadd, remoteadd string, conn net.Conn) *Channel {
-	channel := &Channel{id: id, localadd: localadd, remoteadd: remoteadd, conn: conn}
-	channel.read = make(chan []byte, 128)
-	channel.write = make(chan []byte, 128)
-	return channel
-}
-
-func channelread(c *Channel) {
-	defer c.Done()
-
-	var body [MAX_BUF_SIZE]byte
+func serverreader(t *MessageTrans, channel *Channel) {
+	var buff [MAX_BUF_SIZE]byte
 	for {
-		cnt, err := c.conn.Read(body[:])
+		cnt, err := channel.Read(buff[:])
 		if err != nil {
 			log.Println(err.Error())
-			c.exit = true
 			return
 		}
-
-		bodycpy := make([]byte, cnt)
-		copy(bodycpy, body[:cnt])
-
-		c.Lock()
-		if c.exit {
-			c.Unlock()
+		rsp := &MessageRsponse{ChanID: channel.chanid, MsgType: CONNECT, Body: buff[:cnt]}
+		err = t.MessageRsponseSend(rsp)
+		if err != nil {
+			log.Println(err.Error())
 			return
 		}
-		c.read <- bodycpy
-		c.Unlock()
 	}
 }
 
-func channelwrite(c *Channel) {
-	defer c.Done()
+func channelclose(chanid string, t *MessageTrans) {
+	rsq := &MessageRsponse{ChanID: chanid, MsgType: CLOSE}
+	t.MessageRsponseSend(rsq)
+}
+
+func serverchannelpools(conn net.Conn) {
+	channelpool := NewChannelPool()
+	reader := NewMessageTrans(conn)
+	writer := NewMessageTrans(conn)
 
 	for {
-		body, ok := <-c.write
-		if !ok {
-			return
+		req, err := reader.MessageRequestRecv()
+		if err != nil {
+			log.Println(err.Error())
+			break
 		}
-
-		var sendcnt int
-		for {
-			cnt, err := c.conn.Write(body[sendcnt:])
+		channel := channelpool.Find(req.ChanID)
+		if channel == nil {
+			chanconn := serverconnet(req.RemoteAdd)
+			if chanconn != nil {
+				channel = channelpool.Add(req.ChanID, req.RemoteAdd, chanconn)
+			} else {
+				channelclose(req.ChanID, writer)
+			}
+			go serverreader(writer, channel)
+		} else {
+			err = channel.Write(req.Body)
 			if err != nil {
 				log.Println(err.Error())
-				c.exit = true
-				return
-			}
-			sendcnt += cnt
-			if sendcnt == len(body) {
-				break
+				channelclose(req.ChanID, writer)
 			}
 		}
 	}
-}
-
-func (c *Channel) Start() {
-	c.Add(2)
-	go channelread(c)
-	go channelwrite(c)
-}
-
-func (c *ChannelPool) Write(chanid string, body []byte) error {
-	c.RLock()
-	defer c.RUnlock()
-	channel, ok := c.channels[chanid]
-	if !ok {
-		log.Printf("channel id %s is not exit!\n", chanid)
-		return errors.New("channel is not exit")
-	}
-	return channel.Write(body)
-}
-
-func (c *ChannelPool) Del(chanid string) {
-	c.Lock()
-	defer c.Unlock()
-	delete(c.channels, chanid)
-}
-
-func (c *ChannelPool) Connect(chanid, local, remote string, conn *net.Conn) *Channel {
-	c.Lock()
-	defer c.Unlock()
-}
-
-func (c *ChannelPool) Stop() {
-	c.Lock()
-	defer c.Unlock()
-	for _, v := range c.channels {
-		v.Close()
-	}
-	c.channels = nil
-}
-
-func serverchannel(conn net.Conn) {
-
-	var buf [MAX_BUF_SIZE]byte
-	chanpool := new(ChannelPool)
-
-	for {
-		cnt, err := conn.Read(buf[:])
-		if err != nil {
-			log.Println(err.Error())
-			return
-		}
-
-		cnt++
-	}
-
-	chanpool.Stop()
+	conn.Close()
+	channelpool.Close()
 }
 
 func ServerStart() error {
@@ -245,7 +100,7 @@ func ServerStart() error {
 			conn = tls.Server(conn, tlsconfig)
 		}
 
-		go serverchannel(conn)
+		go serverchannelpools(conn)
 	}
 
 	return nil
