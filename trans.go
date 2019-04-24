@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	MAX_BUF_SIZE      = 4 * 1024        // 缓冲区大小(单位：byte)
+	MAX_BUF_SIZE      = 32 * 1024        // 缓冲区大小(单位：byte)
 	MAGIC_FLAG        = 0x98b7f30a      // 校验魔术字
 	MSG_HEAD_LEN      = 2 * 4           // 消息头长度
 	MAS_TRANS_TIMEOUT = 1 * time.Minute // 传输超时时间
@@ -45,7 +45,7 @@ type MessageTrans struct {
 }
 
 func NewMessageTrans(conn net.Conn) *MessageTrans {
-	return &MessageTrans{buffer: make([]byte, 64*1024), conn: conn, timeout: MAS_TRANS_TIMEOUT}
+	return &MessageTrans{buffer: make([]byte, MAX_BUF_SIZE*2), conn: conn, timeout: MAS_TRANS_TIMEOUT}
 }
 
 func TransferCoder(body []byte) []byte {
@@ -219,6 +219,7 @@ func (t *MessageTrans) MessageRsponseRecv() (*MessageRsponse, error) {
 			if err != nil {
 				return nil, errors.New("decoder rsponse failed!")
 			}
+			copy(t.buffer[0:], t.buffer[Size+MSG_HEAD_LEN:t.index])
 			t.index -= int(Size + MSG_HEAD_LEN)
 			break
 		}
