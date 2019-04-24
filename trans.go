@@ -11,49 +11,41 @@ const (
 	MAX_BUF_SIZE      = 64 * 1024       // 缓冲区大小(单位：byte)
 	MAGIC_FLAG        = 0x98b7f30a      // 校验魔术字
 	MSG_HEAD_LEN      = 2 * 4           // 消息头长度
-	MAS_TRANS_TIMEOUT = 5 * time.Minute // 传输超时时间
+	MAS_TRANS_TIMEOUT = 1 * time.Minute // 传输超时时间
 )
-
-type TransferHeader struct {
-	Flag uint32 // 魔术字
-	Size uint32 // 内容长度
-	Body []byte // 传输的内容
-}
 
 type MessageType uint32
 
 const (
 	_ MessageType = iota
 	CONNECT
-	RUNING
 	CLOSE
 )
 
 type MessageRequest struct {
-	ChanID    string
+	ChanID    uint32
 	MsgType   MessageType
 	RemoteAdd string
 	Body      []byte
 }
 
 type MessageRsponse struct {
-	ChanID  string
+	ChanID  uint32
 	MsgType MessageType
 	Body    []byte
 }
 
 type MessageTrans struct {
 	sync.Mutex
-	head    TransferHeader
+	exit    bool
 	buffer  []byte
 	index   int
-	total   int
 	timeout time.Duration
 	conn    net.Conn
 }
 
 func NewMessageTrans(conn net.Conn) *MessageTrans {
-	return &MessageTrans{buffer: make([]byte, MAX_BUF_SIZE), total: MAX_BUF_SIZE, conn: conn, timeout: MAS_TRANS_TIMEOUT}
+	return &MessageTrans{buffer: make([]byte, 2*MAX_BUF_SIZE), conn: conn, timeout: MAS_TRANS_TIMEOUT}
 }
 
 func TransferCoder(body []byte) []byte {
@@ -68,9 +60,21 @@ func TransferDecoder(body []byte) []byte {
 	return body[MSG_HEAD_LEN:]
 }
 
+func (t *MessageTrans) Close() {
+	t.Lock()
+	defer t.Unlock()
+
+	t.conn.Close()
+	t.exit = true
+}
+
 func (t *MessageTrans) MessageRequestSend(req *MessageRequest) error {
 	t.Lock()
 	defer t.Unlock()
+
+	if t.exit {
+		return errors.New("trans close!")
+	}
 
 	body, err := BinaryCoder(req)
 	if err != nil {
@@ -102,6 +106,10 @@ func (t *MessageTrans) MessageRequestRecv() (*MessageRequest, error) {
 	t.Lock()
 	defer t.Unlock()
 
+	if t.exit {
+		return nil, errors.New("trans close!")
+	}
+
 	var req MessageRequest
 
 	for {
@@ -114,6 +122,10 @@ func (t *MessageTrans) MessageRequestRecv() (*MessageRequest, error) {
 		}
 
 		t.index += cnt
+
+		if t.index < MSG_HEAD_LEN {
+			continue
+		}
 
 		flag := GetUint32(t.buffer[0:4])
 		Size := GetUint32(t.buffer[4:8])
@@ -139,6 +151,10 @@ func (t *MessageTrans) MessageRequestRecv() (*MessageRequest, error) {
 func (t *MessageTrans) MessageRsponseSend(rsp *MessageRsponse) error {
 	t.Lock()
 	defer t.Unlock()
+
+	if t.exit {
+		return errors.New("trans close!")
+	}
 
 	body, err := BinaryCoder(rsp)
 	if err != nil {
@@ -170,6 +186,10 @@ func (t *MessageTrans) MessageRsponseRecv() (*MessageRsponse, error) {
 	t.Lock()
 	defer t.Unlock()
 
+	if t.exit {
+		return nil, errors.New("trans close!")
+	}
+
 	var rsp MessageRsponse
 
 	for {
@@ -182,6 +202,10 @@ func (t *MessageTrans) MessageRsponseRecv() (*MessageRsponse, error) {
 		}
 
 		t.index += cnt
+
+		if t.index < MSG_HEAD_LEN {
+			continue
+		}
 
 		flag := GetUint32(t.buffer[0:4])
 		Size := GetUint32(t.buffer[4:8])

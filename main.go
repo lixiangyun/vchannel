@@ -16,7 +16,7 @@ func init() {
 	flag.BoolVar(&help, "h", false, "this help")
 	flag.BoolVar(&debug, "debug", false, "debug mode")
 	flag.StringVar(&config, "config", "config.yaml", "configure file.")
-	flag.StringVar(&mode, "mode", "client", "server/client.")
+	flag.StringVar(&mode, "mode", "server", "server/client.")
 }
 
 func main() {
@@ -32,4 +32,9 @@ func main() {
 		log.Fatalln(err.Error())
 	}
 
+	if mode == "server" {
+		ServerStart()
+	} else {
+		ClientStart()
+	}
 }

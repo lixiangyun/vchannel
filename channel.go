@@ -2,32 +2,36 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"log"
 	"net"
 	"sync"
 )
 
 type Channel struct {
-	chanid    string
+	chanid    uint32
 	remoteadd string
 	exit      bool
 	conn      net.Conn
 }
 
 type ChannelPool struct {
-	channels map[string]*Channel
+	channels map[uint32]*Channel
 	sync.RWMutex
 }
 
 func (c *Channel) Read(body []byte) (int, error) {
 	if c.exit {
-		return 0, errors.New("channel close")
+		err := fmt.Sprintf("channel %d close", c.chanid)
+		return 0, errors.New(err)
 	}
 	return c.conn.Read(body)
 }
 
 func (c *Channel) Write(body []byte) error {
 	if c.exit {
-		return errors.New("channel close")
+		err := fmt.Sprintf("channel %d close", c.chanid)
+		return errors.New(err)
 	}
 	var sendcnt int
 	for {
@@ -49,31 +53,31 @@ func (c *Channel) Close() {
 	}
 	c.conn.Close()
 	c.exit = true
-}
-
-func NewChannel(chanid, localadd, remoteadd string, conn net.Conn) *Channel {
-	channel := &Channel{chanid: chanid, remoteadd: remoteadd, conn: conn}
-	return channel
+	log.Printf("channel %d close!", c.chanid)
 }
 
 func NewChannelPool() *ChannelPool {
-	return &ChannelPool{channels: make(map[string]*Channel)}
+	return &ChannelPool{channels: make(map[uint32]*Channel)}
 }
 
-func (c *ChannelPool) Find(chanid string) *Channel {
+func (c *ChannelPool) Find(chanid uint32) *Channel {
 	c.RLock()
 	defer c.RUnlock()
 	channel, _ := c.channels[chanid]
 	return channel
 }
 
-func (c *ChannelPool) Del(chanid string) {
+func (c *ChannelPool) Del(chanid uint32) {
 	c.Lock()
 	defer c.Unlock()
-	delete(c.channels, chanid)
+	channel, _ := c.channels[chanid]
+	if channel != nil {
+		channel.Close()
+		delete(c.channels, chanid)
+	}
 }
 
-func (c *ChannelPool) Add(chanid, remote string, conn net.Conn) *Channel {
+func (c *ChannelPool) Add(chanid uint32, remote string, conn net.Conn) *Channel {
 	c.Lock()
 	defer c.Unlock()
 
@@ -89,4 +93,5 @@ func (c *ChannelPool) Close() {
 		v.Close()
 	}
 	c.channels = nil
+	log.Println("channel pool destroy!")
 }

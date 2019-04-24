@@ -1,16 +1,13 @@
 server:
-  address: 0.0.0.0:38080
+  address: 0.0.0.0:8080
   tls: server
 client:
-  address: aws.lixiangyun.top
+  address: 127.0.0.1:8080
   tls: client
 channel:
   - protocol: tcp
-    local: 127.0.0.1:8001
-    remote: 127.0.0.1:8001
-  - protocol: udp
     local: 127.0.0.1:8002
-    remote: 127.0.0.1:8002
+    remote: 127.0.0.1:8082
 tls:
   - name: client
     ca: ./crt/ca.crt
