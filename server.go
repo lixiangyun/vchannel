@@ -19,12 +19,14 @@ func serverconnet(remote string) net.Conn {
 
 func serverreader(t *MessageTrans, channel *Channel) {
 	var buff [MAX_BUF_SIZE]byte
+
 	for {
 		cnt, err := channel.Read(buff[:])
 		if err != nil {
 			log.Println(err.Error())
 			return
 		}
+
 		rsp := &MessageRsponse{ChanID: channel.chanid, MsgType: CONNECT, Body: buff[:cnt]}
 		err = t.MessageRsponseSend(rsp)
 		if err != nil {
@@ -62,12 +64,12 @@ func serverchannelpools(conn net.Conn) {
 				channelclose(req.ChanID, writer)
 			}
 			go serverreader(writer, channel)
+		}
+
+		if req.MsgType == CLOSE {
+			channel.Close()
 		} else {
-			if req.MsgType == CLOSE {
-				channel.Close()
-			} else {
-				channel.Write(req.Body)
-			}
+			channel.Write(req.Body)
 		}
 	}
 	conn.Close()
