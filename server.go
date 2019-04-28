@@ -24,6 +24,7 @@ func serverreader(t *MessageTrans, channel *Channel) {
 		cnt, err := channel.Read(buff[:])
 		if err != nil {
 			log.Println(err.Error())
+			channelclose(channel.chanid, t)
 			return
 		}
 
