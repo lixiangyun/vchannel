@@ -32,6 +32,8 @@ func main() {
 		log.Fatalln(err.Error())
 	}
 
+	StatPrefix(mode)
+
 	if mode == "server" {
 		ServerStart()
 	} else {

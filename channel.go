@@ -52,6 +52,7 @@ func (c *Channel) Close() {
 	if c.exit {
 		return
 	}
+	StatNumsSub()
 	c.conn.Close()
 	c.exit = true
 	log.Printf("close %d channel!", c.chanid)
@@ -81,7 +82,7 @@ func (c *ChannelPool) Del(chanid uint32) {
 func (c *ChannelPool) Add(chanid uint32, remote string, conn net.Conn) *Channel {
 	c.Lock()
 	defer c.Unlock()
-
+	StatNumsAdd()
 	channel := &Channel{chanid: chanid, remoteadd: remote, conn: conn}
 	c.channels[chanid] = channel
 	return channel

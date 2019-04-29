@@ -99,6 +99,8 @@ func (t *MessageTrans) MessageRequestSend(req *MessageRequest) error {
 		}
 	}
 
+	StatAdd(len(req.Body))
+
 	return nil
 }
 
@@ -145,6 +147,8 @@ func (t *MessageTrans) MessageRequestRecv() (*MessageRequest, error) {
 		}
 	}
 
+	StatAdd(len(req.Body))
+
 	return &req, nil
 }
 
@@ -178,6 +182,8 @@ func (t *MessageTrans) MessageRsponseSend(rsp *MessageRsponse) error {
 			break
 		}
 	}
+
+	StatAdd(len(rsp.Body))
 
 	return nil
 }
@@ -224,6 +230,8 @@ func (t *MessageTrans) MessageRsponseRecv() (*MessageRsponse, error) {
 			break
 		}
 	}
+
+	StatAdd(len(rsp.Body))
 
 	return &rsp, nil
 }
