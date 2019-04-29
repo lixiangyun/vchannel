@@ -23,7 +23,6 @@ func serverreader(t *MessageTrans, channel *Channel) {
 	for {
 		cnt, err := channel.Read(buff[:])
 		if err != nil {
-			log.Println(err.Error())
 			channelclose(channel.chanid, t)
 			return
 		}
@@ -31,7 +30,6 @@ func serverreader(t *MessageTrans, channel *Channel) {
 		rsp := &MessageRsponse{ChanID: channel.chanid, MsgType: CONNECT, Body: buff[:cnt]}
 		err = t.MessageRsponseSend(rsp)
 		if err != nil {
-			log.Println(err.Error())
 			return
 		}
 	}
@@ -43,6 +41,8 @@ func channelclose(chanid uint32, t *MessageTrans) {
 }
 
 func serverchannelpools(conn net.Conn) {
+	defer conn.Close()
+
 	channelpool := NewChannelPool()
 	reader := NewMessageTrans(conn)
 	writer := NewMessageTrans(conn)
@@ -52,28 +52,28 @@ func serverchannelpools(conn net.Conn) {
 	for {
 		req, err := reader.MessageRequestRecv()
 		if err != nil {
-			log.Println(err.Error())
 			break
 		}
 
 		channel := channelpool.Find(req.ChanID)
-		if channel == nil {
+		if channel == nil && req.MsgType == CONNECT {
 			chanconn := serverconnet(req.RemoteAdd)
 			if chanconn != nil {
 				channel = channelpool.Add(req.ChanID, req.RemoteAdd, chanconn)
+				go serverreader(writer, channel)
 			} else {
 				channelclose(req.ChanID, writer)
 			}
-			go serverreader(writer, channel)
 		}
 
-		if req.MsgType == CLOSE {
-			channel.Close()
-		} else {
-			channel.Write(req.Body)
+		if channel != nil {
+			if req.MsgType == CLOSE {
+				channel.Close()
+			} else {
+				channel.Write(req.Body)
+			}
 		}
 	}
-	conn.Close()
 	channelpool.Close()
 }
 

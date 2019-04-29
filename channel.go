@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"net"
 	"sync"
@@ -20,18 +19,20 @@ type ChannelPool struct {
 	sync.RWMutex
 }
 
+var (
+	CHANNEL_CLOSE = errors.New("channel close!")
+)
+
 func (c *Channel) Read(body []byte) (int, error) {
 	if c.exit {
-		err := fmt.Sprintf("channel %d close", c.chanid)
-		return 0, errors.New(err)
+		return 0, CHANNEL_CLOSE
 	}
 	return c.conn.Read(body)
 }
 
 func (c *Channel) Write(body []byte) error {
 	if c.exit {
-		err := fmt.Sprintf("channel %d close", c.chanid)
-		return errors.New(err)
+		return CHANNEL_CLOSE
 	}
 	var sendcnt int
 	for {
@@ -53,7 +54,7 @@ func (c *Channel) Close() {
 	}
 	c.conn.Close()
 	c.exit = true
-	log.Printf("channel %d close!", c.chanid)
+	log.Printf("close %d channel!", c.chanid)
 }
 
 func NewChannelPool() *ChannelPool {

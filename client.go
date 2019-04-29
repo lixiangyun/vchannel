@@ -159,17 +159,16 @@ func ChannelProcess(remoteadd string, conn net.Conn) {
 
 	if channel == nil {
 		conn.Close()
-		log.Println("channel new failed!")
+		log.Println("new channel failed!")
 		return
 	}
 
-	log.Printf("channel %d new success!", channel.chanid)
+	log.Printf("new channel %d success!", channel.chanid)
 
 	var buff [MAX_BUF_SIZE]byte
 	for {
 		cnt, err := channel.Read(buff[:])
 		if err != nil {
-			log.Println(err.Error())
 			break
 		} else {
 			req := &MessageRequest{ChanID: chanid,
@@ -218,5 +217,4 @@ func ClientStart() {
 	for {
 		time.Sleep(60 * time.Second)
 	}
-
 }

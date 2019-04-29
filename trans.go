@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	//	"log"
 	"net"
 	"sync"
 	"time"
@@ -85,8 +84,6 @@ func (t *MessageTrans) MessageRequestSend(req *MessageRequest) error {
 	body = TransferCoder(body)
 	var sendcnt int
 
-	//log.Println("send request! size ", len(req.Body), len(body))
-
 	for {
 		deadline := time.Now().Add(t.timeout)
 		t.conn.SetWriteDeadline(deadline)
@@ -148,8 +145,6 @@ func (t *MessageTrans) MessageRequestRecv() (*MessageRequest, error) {
 		}
 	}
 
-	//log.Println("recv request! size ", len(req.Body))
-
 	return &req, nil
 }
 
@@ -168,8 +163,6 @@ func (t *MessageTrans) MessageRsponseSend(rsp *MessageRsponse) error {
 
 	body = TransferCoder(body)
 	var sendcnt int
-
-	//log.Println("send rsponse! size ", len(rsp.Body), len(body))
 
 	for {
 		deadline := time.Now().Add(t.timeout)
@@ -231,8 +224,6 @@ func (t *MessageTrans) MessageRsponseRecv() (*MessageRsponse, error) {
 			break
 		}
 	}
-
-	//log.Println("recv request! size ", len(rsp.Body))
 
 	return &rsp, nil
 }
